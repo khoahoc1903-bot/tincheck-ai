@@ -6,6 +6,8 @@
 
   const state = {
     bridgeReady: false,
+    bridgeWindow: null,
+    bridgeOrigin: '',
     pending: new Map(),
     seq: 0,
 
@@ -53,7 +55,7 @@
     renderView('home');
   }
 
-  /* ===== BACKEND TRANSPORT: FORM POST ===== */
+  /* ===== BACKEND BRIDGE: NESTED IFRAME SAFE ===== */
 
   function initBridge() {
     const url = String(cfg.BACKEND_URL || '').trim();
@@ -66,17 +68,34 @@
       return;
     }
 
-    const frame = $('backendBridge');
-    frame.name = 'backendBridge';
+    state.bridgeReady = false;
+    state.bridgeWindow = null;
+    state.bridgeOrigin = '';
 
-    state.channelToken = makeChannelToken();
-    state.bridgeReady = true;
+    const sep = url.includes('?') ? '&' : '?';
+    $('backendBridge').src = url + sep + 'mode=bridge&v=' + Date.now();
 
     window.addEventListener('message', event => {
       const msg = event.data || {};
 
+      const googleOrigin =
+        event.origin === 'https://script.google.com' ||
+        /^https:\/\/[a-z0-9.-]+\.googleusercontent\.com$/i.test(event.origin);
+
+      if (msg.type === 'tincheck-bridge-ready') {
+        if (!googleOrigin) return;
+
+        // Apps Script HtmlService nằm trong iframe lồng.
+        // event.source chính là cửa sổ Bridge thật sự bên trong Google.
+        state.bridgeWindow = event.source;
+        state.bridgeOrigin = event.origin;
+        state.bridgeReady = true;
+        hideError('homeError');
+        return;
+      }
+
       if (msg.type !== 'tincheck-response' || !msg.requestId) return;
-      if (!msg.channelToken || msg.channelToken !== state.channelToken) return;
+      if (!state.bridgeWindow || event.source !== state.bridgeWindow) return;
 
       const item = state.pending.get(msg.requestId);
       if (!item) return;
@@ -88,37 +107,19 @@
       else item.reject(new Error(msg.error || 'Máy chủ TinCheck trả lỗi.'));
     });
 
-    hideError('homeError');
-  }
-
-  function makeChannelToken() {
-    try {
-      if (crypto && typeof crypto.randomUUID === 'function') {
-        return crypto.randomUUID();
+    setTimeout(() => {
+      if (!state.bridgeReady) {
+        showError(
+          'homeError',
+          'TinCheck chưa kết nối được máy chủ. Vui lòng tải lại trang rồi thử lại.'
+        );
       }
-    } catch (_) {}
-
-    return 'tc_' + Date.now() + '_' + Math.random().toString(36).slice(2) +
-      '_' + Math.random().toString(36).slice(2);
-  }
-
-  function addHiddenField(form, name, value) {
-    const input = document.createElement('textarea');
-    input.name = name;
-    input.value = String(value ?? '');
-    input.hidden = true;
-    form.appendChild(input);
+    }, 10000);
   }
 
   function backendCall(action, payload, timeoutMs = 120000) {
-    const url = String(cfg.BACKEND_URL || '').trim();
-
-    if (!state.bridgeReady) {
+    if (!state.bridgeReady || !state.bridgeWindow) {
       return Promise.reject(new Error('TinCheck chưa kết nối được máy chủ.'));
-    }
-
-    if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(?:\?.*)?$/i.test(url)) {
-      return Promise.reject(new Error('BACKEND_URL chưa đúng.'));
     }
 
     const requestId = 'tc_' + Date.now() + '_' + (++state.seq);
@@ -131,23 +132,17 @@
 
       state.pending.set(requestId, { resolve, reject, timer });
 
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = url;
-      form.target = 'backendBridge';
-      form.style.display = 'none';
-      form.acceptCharset = 'UTF-8';
+      const targetOrigin =
+        state.bridgeOrigin && state.bridgeOrigin !== 'null'
+          ? state.bridgeOrigin
+          : '*';
 
-      addHiddenField(form, 'tc_action', action);
-      addHiddenField(form, 'tc_request_id', requestId);
-      addHiddenField(form, 'tc_channel_token', state.channelToken);
-      addHiddenField(form, 'tc_origin', location.origin);
-      addHiddenField(form, 'tc_payload', JSON.stringify(payload || {}));
-
-      document.body.appendChild(form);
-      form.submit();
-
-      setTimeout(() => form.remove(), 1000);
+      state.bridgeWindow.postMessage({
+        type: 'tincheck-request',
+        requestId,
+        action,
+        payload
+      }, targetOrigin);
     });
   }
 
