@@ -6,7 +6,6 @@
 
   const state = {
     bridgeReady: false,
-    bridgeWaiters: [],
     pending: new Map(),
     seq: 0,
 
@@ -54,7 +53,7 @@
     renderView('home');
   }
 
-  /* ===== BRIDGE ===== */
+  /* ===== BACKEND TRANSPORT: FORM POST ===== */
 
   function initBridge() {
     const url = String(cfg.BACKEND_URL || '').trim();
@@ -62,28 +61,22 @@
     if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(?:\?.*)?$/i.test(url)) {
       setTimeout(() => showError(
         'homeError',
-        'TinCheck chưa được nối với máy chủ. Hãy cấu hình BACKEND_URL trong file config.js.'
+        'TinCheck chưa được nối với máy chủ. Hãy kiểm tra BACKEND_URL trong config.js.'
       ), 250);
       return;
     }
 
-    const sep = url.includes('?') ? '&' : '?';
-    $('backendBridge').src = url + sep + 'mode=bridge&v=' + Date.now();
+    const frame = $('backendBridge');
+    frame.name = 'backendBridge';
+
+    state.channelToken = makeChannelToken();
+    state.bridgeReady = true;
 
     window.addEventListener('message', event => {
-      if (event.source !== $('backendBridge').contentWindow) return;
-
       const msg = event.data || {};
 
-      if (msg.type === 'tincheck-bridge-ready') {
-        state.bridgeReady = true;
-        const waiters = state.bridgeWaiters.splice(0);
-        waiters.forEach(fn => fn());
-        hideError('homeError');
-        return;
-      }
-
       if (msg.type !== 'tincheck-response' || !msg.requestId) return;
+      if (!msg.channelToken || msg.channelToken !== state.channelToken) return;
 
       const item = state.pending.get(msg.requestId);
       if (!item) return;
@@ -95,39 +88,38 @@
       else item.reject(new Error(msg.error || 'Máy chủ TinCheck trả lỗi.'));
     });
 
-    setTimeout(() => {
-      if (!state.bridgeReady) {
-        showError(
-          'homeError',
-          'TinCheck chưa kết nối được máy chủ. Kiểm tra URL backend và TINCHECK_FRONTEND_ORIGIN trong Apps Script.'
-        );
+    hideError('homeError');
+  }
+
+  function makeChannelToken() {
+    try {
+      if (crypto && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
       }
-    }, 9000);
+    } catch (_) {}
+
+    return 'tc_' + Date.now() + '_' + Math.random().toString(36).slice(2) +
+      '_' + Math.random().toString(36).slice(2);
   }
 
-  function waitBridge(timeoutMs = 12000) {
-    if (state.bridgeReady) return Promise.resolve();
-
-    return new Promise((resolve, reject) => {
-      let done = false;
-
-      const timer = setTimeout(() => {
-        if (done) return;
-        done = true;
-        reject(new Error('Chưa kết nối được máy chủ TinCheck.'));
-      }, timeoutMs);
-
-      state.bridgeWaiters.push(() => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        resolve();
-      });
-    });
+  function addHiddenField(form, name, value) {
+    const input = document.createElement('textarea');
+    input.name = name;
+    input.value = String(value ?? '');
+    input.hidden = true;
+    form.appendChild(input);
   }
 
-  async function backendCall(action, payload, timeoutMs = 120000) {
-    await waitBridge();
+  function backendCall(action, payload, timeoutMs = 120000) {
+    const url = String(cfg.BACKEND_URL || '').trim();
+
+    if (!state.bridgeReady) {
+      return Promise.reject(new Error('TinCheck chưa kết nối được máy chủ.'));
+    }
+
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(?:\?.*)?$/i.test(url)) {
+      return Promise.reject(new Error('BACKEND_URL chưa đúng.'));
+    }
 
     const requestId = 'tc_' + Date.now() + '_' + (++state.seq);
 
@@ -139,12 +131,23 @@
 
       state.pending.set(requestId, { resolve, reject, timer });
 
-      $('backendBridge').contentWindow.postMessage({
-        type: 'tincheck-request',
-        requestId,
-        action,
-        payload
-      }, '*');
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = url;
+      form.target = 'backendBridge';
+      form.style.display = 'none';
+      form.acceptCharset = 'UTF-8';
+
+      addHiddenField(form, 'tc_action', action);
+      addHiddenField(form, 'tc_request_id', requestId);
+      addHiddenField(form, 'tc_channel_token', state.channelToken);
+      addHiddenField(form, 'tc_origin', location.origin);
+      addHiddenField(form, 'tc_payload', JSON.stringify(payload || {}));
+
+      document.body.appendChild(form);
+      form.submit();
+
+      setTimeout(() => form.remove(), 1000);
     });
   }
 
