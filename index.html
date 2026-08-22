@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0B57D0">
+  <meta name="description" content="TinCheck AI - Kiểm tra trước khi tin, xác minh trước khi chia sẻ.">
+  <title>TinCheck AI</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<iframe id="backendBridge" class="backend-bridge" title="TinCheck backend"></iframe>
+
+<main class="app-shell" id="app">
+  <header class="brand-card">
+    <div class="brand-icon" aria-hidden="true"><span class="brand-shield">✓</span></div>
+    <div class="brand-copy">
+      <div class="brand-name">TinCheck AI</div>
+      <div class="slogan-line">Kiểm tra trước khi tin</div>
+      <div class="slogan-line">Xác minh trước khi chia sẻ</div>
+    </div>
+  </header>
+
+  <section id="homeScreen" class="screen">
+    <h1>Bạn muốn kiểm tra bằng cách nào?</h1>
+
+    <div class="input-actions">
+      <button class="input-card" id="voiceBtn" type="button">
+        <span class="input-icon">🎤</span>
+        <span class="input-copy"><strong>Nói để kiểm tra</strong><small>Kể lại điều đang xảy ra</small></span>
+      </button>
+
+      <button class="input-card" id="cameraBtn" type="button">
+        <span class="input-icon">📷</span>
+        <span class="input-copy"><strong>Chụp ảnh ngay</strong><small>Mở camera và chụp trực tiếp</small></span>
+      </button>
+
+      <button class="input-card" id="galleryBtn" type="button">
+        <span class="input-icon">🖼️</span>
+        <span class="input-copy"><strong>Chọn ảnh có sẵn</strong><small>Lấy ảnh từ điện thoại</small></span>
+      </button>
+
+      <button class="input-card" id="textBtn" type="button">
+        <span class="input-icon">✍️</span>
+        <span class="input-copy"><strong>Dán nội dung hoặc link</strong><small>Tin nhắn, bài đăng, đường link...</small></span>
+      </button>
+    </div>
+
+    <input id="galleryInput" class="visually-hidden" type="file" accept="image/*">
+
+    <section id="textPanel" class="work-panel hidden">
+      <label for="textInput">Nội dung cần kiểm tra</label>
+      <textarea id="textInput" placeholder="Dán nội dung hoặc đường link vào đây..."></textarea>
+      <button class="primary-btn" id="checkTextBtn" type="button">🔎 KIỂM TRA NGAY</button>
+    </section>
+
+    <section id="voicePanel" class="work-panel hidden" aria-live="polite">
+      <div class="panel-title">Nói để TinCheck nghe</div>
+
+      <div id="recordingBox" class="recording-box hidden">
+        <div class="recording-dot" aria-hidden="true"></div>
+        <div>
+          <strong>Đang nghe...</strong>
+          <div id="recordingTimer" class="recording-time">00:00 / 00:25</div>
+        </div>
+      </div>
+
+      <button id="stopRecordBtn" class="primary-btn hidden" type="button">⏹ DỪNG & NHẬN DIỆN</button>
+
+      <div id="transcribingBox" class="voice-status hidden">🧠 TinCheck đang nhận diện lời nói...</div>
+
+      <div id="transcriptConfirm" class="hidden">
+        <div class="panel-title">TinCheck nghe được:</div>
+        <div id="voiceTranscript" class="transcript"></div>
+        <div class="two-buttons">
+          <button class="primary-btn" id="confirmVoiceBtn" type="button">✓ ĐÚNG RỒI, KIỂM TRA</button>
+          <button class="outline-btn" id="speakAgainBtn" type="button">🎤 NÓI LẠI</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="cameraPanel" class="work-panel hidden">
+      <div class="panel-title">Chụp nội dung cần kiểm tra</div>
+      <video id="cameraVideo" class="camera-video" autoplay muted playsinline></video>
+      <div class="two-buttons">
+        <button class="primary-btn" id="takePhotoBtn" type="button">📷 CHỤP ẢNH</button>
+        <button class="outline-btn" id="closeCameraBtn" type="button">ĐÓNG CAMERA</button>
+      </div>
+    </section>
+
+    <section id="imagePanel" class="work-panel hidden">
+      <div class="panel-title">Ảnh sẽ được kiểm tra</div>
+      <img id="imagePreview" class="image-preview" alt="Ảnh được chọn để kiểm tra">
+      <div class="two-buttons">
+        <button class="primary-btn" id="checkImageBtn" type="button">🔎 KIỂM TRA ẢNH NÀY</button>
+        <button class="outline-btn" id="chooseAgainBtn" type="button">↻ CHỌN ẢNH KHÁC</button>
+      </div>
+    </section>
+
+    <div id="homeError" class="error-box hidden" role="alert"></div>
+  </section>
+
+  <section id="loadingScreen" class="screen hidden" aria-live="polite">
+    <div class="loading-card">
+      <div class="loader"></div>
+      <h2>TinCheck đang kiểm tra...</h2>
+      <div class="loading-steps">
+        <div>🔎 Đọc nội dung</div>
+        <div>🌐 Kiểm tra nguồn khi cần</div>
+        <div>🛡️ Tìm dấu hiệu bất thường</div>
+        <div>⚠️ Xác định việc nên làm</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="resultScreen" class="screen hidden" aria-live="polite">
+    <div class="result-top-row">
+      <div id="riskCard" class="risk-card risk-review">
+        <div class="risk-icon" id="riskIcon">🟠</div>
+        <div class="risk-copy">
+          <div class="risk-level" id="riskLevel">CẦN KIỂM TRA THÊM</div>
+          <div class="risk-headline" id="riskHeadline">Chưa nên tin, chia sẻ hoặc làm theo ngay</div>
+        </div>
+      </div>
+
+      <button id="listenBtn" class="listen-btn" type="button">
+        <span class="listen-icon">🔊</span>
+        <span id="listenLabel">NGHE<br>KẾT QUẢ</span>
+      </button>
+    </div>
+
+    <section class="do-now-card">
+      <h2>Bạn nên làm ngay</h2>
+      <div id="actionList" class="action-list"></div>
+    </section>
+
+    <button id="shareBtn" class="share-btn hidden" type="button">💬 GỬI NGƯỜI THÂN KIỂM TRA THÊM</button>
+
+    <button class="accordion-btn" id="whyBtn" type="button">
+      <span>🔎 Vì sao TinCheck cảnh báo?</span><span>⌄</span>
+    </button>
+    <section class="accordion-panel hidden" id="whyPanel"></section>
+
+    <button class="accordion-btn" id="sourceBtn" type="button">
+      <span>🌐 TinCheck đã đối chiếu gì?</span><span>⌄</span>
+    </button>
+    <section class="accordion-panel hidden" id="sourcePanel"></section>
+
+    <button class="accordion-btn" id="detailBtn" type="button">
+      <span>🧠 Xem phân tích chi tiết</span><span>⌄</span>
+    </button>
+    <section class="accordion-panel hidden" id="detailPanel"></section>
+
+    <div id="resultError" class="error-box hidden" role="alert"></div>
+  </section>
+</main>
+
+<div id="toast" class="toast hidden" role="status"></div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
