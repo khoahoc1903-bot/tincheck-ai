@@ -705,6 +705,13 @@
 
     try {
       const result = await backendCall('analyzeInput', payload, 120000);
+
+      // Chỉ xóa nội dung đã dán sau khi kiểm tra thành công.
+      // Nếu có lỗi thì vẫn giữ nguyên để người dùng thử lại.
+      if (payload && payload.mode === 'text' && $('textInput')) {
+        $('textInput').value = '';
+      }
+
       showResultWithSafeBack(result);
     } catch (err) {
       history.replaceState({ tc: 'home' }, '', location.pathname + location.search);
@@ -942,7 +949,7 @@
     const r = state.lastResult;
     if (!r || !['HIGH', 'REVIEW', 'INSUFFICIENT'].includes(r.risk)) return;
 
-    const text = String(r.shareText || '').trim();
+    const text = normalizeShareText(r.shareText);
 
     if (!text) {
       showError('resultError', 'TinCheck chưa tạo được nội dung gửi người thân.');
@@ -978,6 +985,14 @@
         );
       }
     }
+  }
+
+  function normalizeShareText(value) {
+    return String(value || '')
+      .replace(/\\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[ \t]+\n/g, '\n')
+      .trim();
   }
 
   function fallbackCopy(text) {
