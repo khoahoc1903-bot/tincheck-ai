@@ -827,9 +827,13 @@
 
     renderGrounding(r.grounding || {});
 
+    const imageDetailLine = String(r.inputMode || '').toLowerCase() === 'image'
+      ? `<div class="detail-line">🖼️ <strong>Hình ảnh / chỉnh sửa:</strong> ${esc(r.syntheticAssessment || 'Chưa đủ cơ sở để đánh giá')}</div>`
+      : '';
+
     $('detailPanel').innerHTML = `
       <div class="detail-line">🌐 <strong>Nguồn tin:</strong> ${esc(r.sourceAssessment || 'Chưa đánh giá')}</div>
-      <div class="detail-line">🖼️ <strong>Hình ảnh / chỉnh sửa:</strong> ${esc(r.syntheticAssessment || 'Chưa đánh giá')}</div>
+      ${imageDetailLine}
       <div class="detail-line">${r.risk === 'HIGH' ? '⚠️' : 'ℹ️'} <strong>Hành động cần lưu ý:</strong> ${esc(r.intentAssessment || 'Chưa đánh giá')}</div>`;
 
     $('whyPanel').classList.add('hidden');
