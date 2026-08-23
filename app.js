@@ -273,7 +273,8 @@
       analyze({
         mode: 'image',
         imageBase64: state.image.base64,
-        mimeType: state.image.mimeType
+        mimeType: state.image.mimeType,
+        inputSource: 'image'
       });
     });
 
@@ -285,7 +286,7 @@
         return;
       }
 
-      analyze({ mode: 'text', text });
+      analyze({ mode: 'text', text, inputSource: 'text' });
     });
 
     $('confirmVoiceBtn').addEventListener('click', () => {
@@ -296,7 +297,7 @@
         return;
       }
 
-      analyze({ mode: 'text', text });
+      analyze({ mode: 'text', text, inputSource: 'voice' });
     });
 
     $('listenBtn').addEventListener('click', toggleSpeech);
@@ -701,22 +702,52 @@
     stopCamera();
     await stopRecording(false);
 
+    // Ghi nhớ người dùng đang kiểm tra từ đâu để nếu lỗi thật sự
+    // thì trả họ về đúng chỗ, không quăng về màn Home.
+    const inputSource = String(payload && payload.inputSource || '').toLowerCase();
+    const returnPanel =
+      inputSource === 'text' ? 'text' :
+      inputSource === 'voice' ? 'voice' :
+      inputSource === 'image' ? 'image' :
+      (state.panel || null);
+
     renderView('loading');
 
     try {
       const result = await backendCall('analyzeInput', payload, 120000);
 
-      // Chỉ xóa nội dung đã dán sau khi kiểm tra thành công.
-      // Nếu có lỗi thì vẫn giữ nguyên để người dùng thử lại.
-      if (payload && payload.mode === 'text' && $('textInput')) {
+      // CHỈ khi đã có kết quả thật sự mới dọn ô nhập.
+      // Vì vậy quay lại từ màn kết quả luôn là một lượt kiểm tra mới, ô trống.
+      if (inputSource === 'text' && $('textInput')) {
         $('textInput').value = '';
       }
 
+      if (inputSource === 'voice' && $('voiceTranscript')) {
+        $('voiceTranscript').textContent = '';
+      }
+
+      // Ảnh giữ trong state đến khi result render xong; sau đó mới bỏ
+      // để lần kiểm tra tiếp theo không dính ảnh cũ.
+      if (inputSource === 'image') {
+        state.image = null;
+        if ($('galleryInput')) $('galleryInput').value = '';
+      }
+
+      hideError('homeError');
       showResultWithSafeBack(result);
+
     } catch (err) {
-      history.replaceState({ tc: 'home' }, '', location.pathname + location.search);
-      renderView('home');
-      showError('homeError', err.message || 'TinCheck chưa xử lý được nội dung.');
+      // Nếu retry nội bộ vẫn thất bại, KHÔNG xóa nội dung.
+      // Trả đúng về panel cũ để người dùng chỉ cần bấm lại.
+      renderView('home', returnPanel);
+
+      const raw = String(err && err.message || '');
+      const friendly =
+        /chưa đọc được kết quả AI/i.test(raw)
+          ? 'TinCheck đang gặp lỗi tạm thời khi đọc kết quả. Nội dung vẫn còn, vui lòng bấm kiểm tra lại.'
+          : (raw || 'TinCheck chưa xử lý được nội dung. Nội dung vẫn còn, vui lòng thử lại.');
+
+      showError('homeError', friendly);
     }
   }
 
@@ -959,7 +990,6 @@
     try {
       if (navigator.share) {
         await navigator.share({
-          title: 'TinCheck AI',
           text
         });
         return;
