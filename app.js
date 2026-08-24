@@ -825,14 +825,24 @@
           </div>`).join('')
       : '<div>Chưa có đủ dấu hiệu để giải thích chi tiết.</div>';
 
-    renderGrounding(r.grounding || {});
+    const grounding = r.grounding || {};
+    const hasGroundingSources = Array.isArray(grounding.sources) && grounding.sources.length > 0;
+    renderGrounding(grounding);
+
+    // Không có nguồn thật thì ẩn hẳn mục đối chiếu, không phơi trạng thái kỹ thuật.
+    $('sourceBtn').classList.toggle('hidden', !hasGroundingSources);
+    if (!hasGroundingSources) $('sourcePanel').classList.add('hidden');
+
+    const sourceDetailLine = hasGroundingSources && r.sourceAssessment
+      ? `<div class="detail-line">🌐 <strong>Nguồn tin:</strong> ${esc(r.sourceAssessment)}</div>`
+      : '';
 
     const imageDetailLine = String(r.inputMode || '').toLowerCase() === 'image'
       ? `<div class="detail-line">🖼️ <strong>Hình ảnh / chỉnh sửa:</strong> ${esc(r.syntheticAssessment || 'Chưa đủ cơ sở để đánh giá')}</div>`
       : '';
 
     $('detailPanel').innerHTML = `
-      <div class="detail-line">🌐 <strong>Nguồn tin:</strong> ${esc(r.sourceAssessment || 'Chưa đánh giá')}</div>
+      ${sourceDetailLine}
       ${imageDetailLine}
       <div class="detail-line">${r.risk === 'HIGH' ? '⚠️' : 'ℹ️'} <strong>Hành động cần lưu ý:</strong> ${esc(r.intentAssessment || 'Chưa đánh giá')}</div>`;
 
@@ -845,6 +855,12 @@
   }
 
   function renderGrounding(g) {
+    const sources = Array.isArray(g && g.sources) ? g.sources : [];
+    if (!sources.length) {
+      $('sourcePanel').innerHTML = '';
+      return;
+    }
+
     let html = '';
 
     if (g.statusLabel) {
@@ -855,34 +871,27 @@
       html += `<div class="evidence-summary">${esc(g.summary)}</div>`;
     }
 
-    if (Array.isArray(g.sources) && g.sources.length) {
-      html += g.sources.map(s => {
-        let domain = '';
-        try { domain = s.domain || new URL(s.url).hostname; } catch (_) {}
+    html += sources.map(s => {
+      let domain = '';
+      try { domain = s.domain || new URL(s.url).hostname; } catch (_) {}
 
-        const name = s.displayName || s.title || s.url;
-        const trust = s.whyTrusted || domain;
+      const name = s.displayName || s.title || s.url;
+      const trust = s.whyTrusted || domain;
 
-        return `
-          <a class="source-link"
-             href="${attr(s.url)}"
-             target="_blank"
-             rel="noopener noreferrer">
-            🌐 <strong>${esc(name)}</strong>
-            ${s.title && s.title !== name ? `<br>${esc(s.title)}` : ''}
-            ${trust ? `<br><small>${esc(trust)}</small>` : ''}
-          </a>`;
-      }).join('');
-    } else if (g.evidenceStatus === 'NOT_SEARCHED') {
-      html += '<div>Trường hợp này chưa cần dùng lượt tra cứu web.</div>';
-    } else if (g.evidenceStatus === 'NO_EVIDENCE') {
-      html += '<div>Chưa tìm thấy nguồn trực tuyến đủ mạnh để xác nhận nội dung.</div>';
-    } else if (g.evidenceStatus === 'SEARCH_ERROR') {
-      html += '<div>Đối chiếu web đang tạm thời không khả dụng; TinCheck vẫn phân tích dựa trên nội dung.</div>';
-    }
+      return `
+        <a class="source-link"
+           href="${attr(s.url)}"
+           target="_blank"
+           rel="noopener noreferrer">
+          🌐 <strong>${esc(name)}</strong>
+          ${s.title && s.title !== name ? `<br>${esc(s.title)}` : ''}
+          ${trust ? `<br><small>${esc(trust)}</small>` : ''}
+        </a>`;
+    }).join('');
 
     $('sourcePanel').innerHTML = html;
   }
+
 
   function actionIcon(code) {
     const map = {
