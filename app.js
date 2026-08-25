@@ -828,26 +828,20 @@
     const grounding = r.grounding || {};
     const hasGroundingSources = Array.isArray(grounding.sources) && grounding.sources.length > 0;
     renderGrounding(grounding);
-
-    // Không có nguồn thật thì ẩn hẳn mục đối chiếu, không phơi trạng thái kỹ thuật.
     $('sourceBtn').classList.toggle('hidden', !hasGroundingSources);
-    if (!hasGroundingSources) $('sourcePanel').classList.add('hidden');
-
-    const sourceDetailLine = hasGroundingSources && r.sourceAssessment
-      ? `<div class="detail-line">🌐 <strong>Nguồn tin:</strong> ${esc(r.sourceAssessment)}</div>`
-      : '';
 
     const imageDetailLine = String(r.inputMode || '').toLowerCase() === 'image'
       ? `<div class="detail-line">🖼️ <strong>Hình ảnh / chỉnh sửa:</strong> ${esc(r.syntheticAssessment || 'Chưa đủ cơ sở để đánh giá')}</div>`
       : '';
 
-    const intentDetailLine = r.intentAssessment
-      ? `<div class="detail-line">${r.risk === 'HIGH' ? '⚠️' : 'ℹ️'} <strong>Hành động cần lưu ý:</strong> ${esc(r.intentAssessment)}</div>`
+    const sourceDetailLine = hasGroundingSources && r.sourceAssessment
+      ? `<div class="detail-line">🌐 <strong>Nguồn tin:</strong> ${esc(r.sourceAssessment)}</div>`
       : '';
 
-    const detailLines = [sourceDetailLine, imageDetailLine, intentDetailLine].filter(Boolean);
-    $('detailPanel').innerHTML = detailLines.join('');
-    $('detailBtn').classList.toggle('hidden', detailLines.length === 0);
+    $('detailPanel').innerHTML = `
+      ${sourceDetailLine}
+      ${imageDetailLine}
+      <div class="detail-line">${r.risk === 'HIGH' ? '⚠️' : 'ℹ️'} <strong>Hành động cần lưu ý:</strong> ${esc(r.intentAssessment || 'Chưa đánh giá')}</div>`;
 
     $('whyPanel').classList.add('hidden');
     $('sourcePanel').classList.add('hidden');
@@ -858,8 +852,8 @@
   }
 
   function renderGrounding(g) {
-    const sources = Array.isArray(g && g.sources) ? g.sources : [];
-    if (!sources.length) {
+    const hasSources = Array.isArray(g.sources) && g.sources.length > 0;
+    if (!hasSources) {
       $('sourcePanel').innerHTML = '';
       return;
     }
@@ -874,27 +868,28 @@
       html += `<div class="evidence-summary">${esc(g.summary)}</div>`;
     }
 
-    html += sources.map(s => {
-      let domain = '';
-      try { domain = s.domain || new URL(s.url).hostname; } catch (_) {}
+    if (Array.isArray(g.sources) && g.sources.length) {
+      html += g.sources.map(s => {
+        let domain = '';
+        try { domain = s.domain || new URL(s.url).hostname; } catch (_) {}
 
-      const name = s.displayName || s.title || s.url;
-      const trust = s.whyTrusted || domain;
+        const name = s.displayName || s.title || s.url;
+        const trust = s.whyTrusted || domain;
 
-      return `
-        <a class="source-link"
-           href="${attr(s.url)}"
-           target="_blank"
-           rel="noopener noreferrer">
-          🌐 <strong>${esc(name)}</strong>
-          ${s.title && s.title !== name ? `<br>${esc(s.title)}` : ''}
-          ${trust ? `<br><small>${esc(trust)}</small>` : ''}
-        </a>`;
-    }).join('');
+        return `
+          <a class="source-link"
+             href="${attr(s.url)}"
+             target="_blank"
+             rel="noopener noreferrer">
+            🌐 <strong>${esc(name)}</strong>
+            ${s.title && s.title !== name ? `<br>${esc(s.title)}` : ''}
+            ${trust ? `<br><small>${esc(trust)}</small>` : ''}
+          </a>`;
+      }).join('');
+    }
 
     $('sourcePanel').innerHTML = html;
   }
-
 
   function actionIcon(code) {
     const map = {
