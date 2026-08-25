@@ -841,10 +841,13 @@
       ? `<div class="detail-line">🖼️ <strong>Hình ảnh / chỉnh sửa:</strong> ${esc(r.syntheticAssessment || 'Chưa đủ cơ sở để đánh giá')}</div>`
       : '';
 
-    $('detailPanel').innerHTML = `
-      ${sourceDetailLine}
-      ${imageDetailLine}
-      <div class="detail-line">${r.risk === 'HIGH' ? '⚠️' : 'ℹ️'} <strong>Hành động cần lưu ý:</strong> ${esc(r.intentAssessment || 'Chưa đánh giá')}</div>`;
+    const intentDetailLine = r.intentAssessment
+      ? `<div class="detail-line">${r.risk === 'HIGH' ? '⚠️' : 'ℹ️'} <strong>Hành động cần lưu ý:</strong> ${esc(r.intentAssessment)}</div>`
+      : '';
+
+    const detailLines = [sourceDetailLine, imageDetailLine, intentDetailLine].filter(Boolean);
+    $('detailPanel').innerHTML = detailLines.join('');
+    $('detailBtn').classList.toggle('hidden', detailLines.length === 0);
 
     $('whyPanel').classList.add('hidden');
     $('sourcePanel').classList.add('hidden');
