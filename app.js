@@ -826,15 +826,15 @@
       : '<div>Chưa có đủ dấu hiệu để giải thích chi tiết.</div>';
 
     const grounding = r.grounding || {};
-    const hasGroundingSources = Array.isArray(grounding.sources) && grounding.sources.length > 0;
+    const hasSources = Array.isArray(grounding.sources) && grounding.sources.length > 0;
+    $('sourceBtn').classList.toggle('hidden', !hasSources);
     renderGrounding(grounding);
-    $('sourceBtn').classList.toggle('hidden', !hasGroundingSources);
 
     const imageDetailLine = String(r.inputMode || '').toLowerCase() === 'image'
       ? `<div class="detail-line">🖼️ <strong>Hình ảnh / chỉnh sửa:</strong> ${esc(r.syntheticAssessment || 'Chưa đủ cơ sở để đánh giá')}</div>`
       : '';
 
-    const sourceDetailLine = hasGroundingSources && r.sourceAssessment
+    const sourceDetailLine = hasSources && r.sourceAssessment
       ? `<div class="detail-line">🌐 <strong>Nguồn tin:</strong> ${esc(r.sourceAssessment)}</div>`
       : '';
 
@@ -852,8 +852,11 @@
   }
 
   function renderGrounding(g) {
-    const hasSources = Array.isArray(g.sources) && g.sources.length > 0;
-    if (!hasSources) {
+    const sources = Array.isArray(g && g.sources) ? g.sources : [];
+
+    // Không có nguồn thật thì nút đã được ẩn ở renderResult.
+    // Không hiện câu kỹ thuật kiểu "không tìm thấy", "web lỗi", "chưa cần tra cứu".
+    if (!sources.length) {
       $('sourcePanel').innerHTML = '';
       return;
     }
@@ -868,25 +871,23 @@
       html += `<div class="evidence-summary">${esc(g.summary)}</div>`;
     }
 
-    if (Array.isArray(g.sources) && g.sources.length) {
-      html += g.sources.map(s => {
-        let domain = '';
-        try { domain = s.domain || new URL(s.url).hostname; } catch (_) {}
+    html += sources.slice(0, 2).map(s => {
+      let domain = '';
+      try { domain = s.domain || new URL(s.url).hostname; } catch (_) {}
 
-        const name = s.displayName || s.title || s.url;
-        const trust = s.whyTrusted || domain;
+      const name = s.displayName || s.title || s.url;
+      const trust = s.whyTrusted || domain;
 
-        return `
-          <a class="source-link"
-             href="${attr(s.url)}"
-             target="_blank"
-             rel="noopener noreferrer">
-            🌐 <strong>${esc(name)}</strong>
-            ${s.title && s.title !== name ? `<br>${esc(s.title)}` : ''}
-            ${trust ? `<br><small>${esc(trust)}</small>` : ''}
-          </a>`;
-      }).join('');
-    }
+      return `
+        <a class="source-link"
+           href="${attr(s.url)}"
+           target="_blank"
+           rel="noopener noreferrer">
+          🌐 <strong>${esc(name)}</strong>
+          ${s.title && s.title !== name ? `<br>${esc(s.title)}` : ''}
+          ${trust ? `<br><small>${esc(trust)}</small>` : ''}
+        </a>`;
+    }).join('');
 
     $('sourcePanel').innerHTML = html;
   }
