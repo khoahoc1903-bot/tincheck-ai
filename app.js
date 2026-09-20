@@ -7,11 +7,41 @@
   const chooser=$('inputActions');
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition||null;
 
-  function showScreen(name,push=false){
+  function showScreen(name){
     Object.values(screens).forEach(x=>x&&x.classList.add('hidden'));
     screens[name]&&screens[name].classList.remove('hidden');
-    if(push&&name==='result') history.pushState({tincheckScreen:'result'},'', '#ket-qua');
     window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  // TinCheck chỉ dùng nút Back cứng / gesture Back của điện thoại.
+  // Mỗi lượt kiểm tra chỉ tạo 1 mốc history nội bộ:
+  // HOME -> WORK/RESULT. Vì RESULT thay thế WORK nên bấm Back 1 lần
+  // luôn quay về HOME và xóa dữ liệu, không hiện nút quay lại riêng.
+  function ensureHomeHistory(){
+    const st=history.state||{};
+    if(!st.tincheck){
+      history.replaceState({tincheck:'home'},'',location.pathname+location.search);
+    }
+  }
+  function enterWorkHistory(mode){
+    const st=history.state||{};
+    if(st.tincheck==='work'){
+      history.replaceState({tincheck:'work',mode},'', '#nhap');
+      return;
+    }
+    if(st.tincheck==='result'){
+      history.replaceState({tincheck:'work',mode},'', '#nhap');
+      return;
+    }
+    history.pushState({tincheck:'work',mode},'', '#nhap');
+  }
+  function enterResultHistory(){
+    const st=history.state||{};
+    if(st.tincheck==='work'||st.tincheck==='result'){
+      history.replaceState({tincheck:'result'},'', '#ket-qua');
+    }else{
+      history.pushState({tincheck:'result'},'', '#ket-qua');
+    }
   }
   function hideError(id){const b=$(id);if(!b)return;b.textContent='';b.classList.add('hidden')}
   function showError(id,msg){const b=$(id);if(!b)return;b.textContent=friendlyError(msg);b.classList.remove('hidden');b.scrollIntoView({behavior:'smooth',block:'nearest'})}
@@ -23,8 +53,9 @@
   }
   function hidePanels(){Object.values(panels).forEach(p=>p&&p.classList.add('hidden'));hideError('homeError')}
   function stopRecognition(){if(state.recognition){try{state.recognition.abort()}catch(e){}state.recognition=null}}
-  function openMode(mode){
+  function openMode(mode,manageHistory=true){
     stopRecognition();hidePanels();chooser&&chooser.classList.add('hidden');state.inputMode=mode;
+    if(manageHistory)enterWorkHistory(mode);
     const p=panels[mode];if(p){p.classList.remove('hidden');setTimeout(()=>p.scrollIntoView({behavior:'smooth',block:'start'}),60)}
     if(mode==='text')setTimeout(()=>$('textInput')&&$('textInput').focus(),120);
   }
@@ -36,10 +67,7 @@
     if($('cameraInput'))$('cameraInput').value='';if($('galleryInput'))$('galleryInput').value='';
     showScreen('home');
   }
-  document.querySelectorAll('[data-change-mode]').forEach(b=>b.addEventListener('click',resetHome));
-  $('newCheckBtn')&&$('newCheckBtn').addEventListener('click',()=>{history.replaceState({},'',location.pathname+location.search);resetHome()});
-
-  $('textBtn').addEventListener('click',()=>openMode('text'));
+$('textBtn').addEventListener('click',()=>openMode('text'));
   $('cameraBtn').addEventListener('click',()=>{$('cameraInput').click()});
   $('galleryBtn').addEventListener('click',()=>{$('galleryInput').click()});
   $('cameraInput').addEventListener('change',e=>handleImageFile(e.target.files&&e.target.files[0]));
@@ -91,8 +119,8 @@
     hideError('homeError');hideError('resultError');stopSpeaking();showScreen('loading');
     const title=$('loadingTitle'),note=$('loadingNote');title.textContent='TinCheck đang kiểm tra...';note.textContent='Đang đọc nội dung và đối chiếu nguồn khi cần.';
     const slowTimer=setTimeout(()=>{if(!screens.loading.classList.contains('hidden'))note.textContent='TinCheck đang đối chiếu nguồn. Một số nguồn có thể phản hồi chậm hơn bình thường.'},22000);
-    try{const result=await rpc('analyzeInput',payload,90000);clearTimeout(slowTimer);state.lastResult=result;renderResult(result);showScreen('result',true)}
-    catch(e){clearTimeout(slowTimer);showScreen('home');if(state.inputMode==='voice')openMode('voice');else if(state.inputMode==='image'&&state.image)openMode('image');else if(state.inputMode==='text')openMode('text');showError('homeError',e&&e.message?e.message:String(e))}
+    try{const result=await rpc('analyzeInput',payload,90000);clearTimeout(slowTimer);state.lastResult=result;renderResult(result);enterResultHistory();showScreen('result')}
+    catch(e){clearTimeout(slowTimer);showScreen('home');if(state.inputMode==='voice')openMode('voice',false);else if(state.inputMode==='image'&&state.image)openMode('image',false);else if(state.inputMode==='text')openMode('text',false);showError('homeError',e&&e.message?e.message:String(e))}
   }
 
   const riskUi={VERIFIED:{cls:'risk-low',icon:'✅',level:'ĐÃ XÁC MINH'},HIGH:{cls:'risk-high',icon:'🔴',level:'NGUY CƠ CAO'},REVIEW:{cls:'risk-review',icon:'🟠',level:'CẦN KIỂM TRA THÊM'},LOW:{cls:'risk-low',icon:'🟢',level:'CHƯA THẤY DẤU HIỆU ĐÁNG LO'},INSUFFICIENT:{cls:'risk-insufficient',icon:'🔵',level:'CHƯA ĐỦ THÔNG TIN'}};
@@ -114,7 +142,12 @@
 
   $('shareBtn').addEventListener('click',async()=>{const r=state.lastResult;if(!r)return;const text=r.shareText||[riskUi[r.risk]?.level||'KẾT QUẢ TINCHECK',r.headline||'',...(r.actions||[]).slice(0,2).map(a=>'• '+(typeof a==='string'?a:a.text))].join('\n');try{if(navigator.share)await navigator.share({title:'TinCheck AI',text,url:location.href.split('#')[0]});else{await navigator.clipboard.writeText(text);showError('resultError','Đã sao chép nội dung. Mở Zalo và dán để gửi người thân.')}}catch(e){if(e&&e.name!=='AbortError')showError('resultError','Chưa mở được chức năng chia sẻ. Vui lòng thử lại.')}});
   [['whyBtn','whyPanel'],['sourceBtn','sourcePanel'],['detailBtn','detailPanel']].forEach(([b,p])=>$(b).addEventListener('click',()=>$(p).classList.toggle('hidden')));
-  window.addEventListener('popstate',()=>resetHome());
+  window.addEventListener('popstate',()=>{
+    // Back cứng/gesture Back: quay về màn hình chọn cách kiểm tra và xóa dữ liệu.
+    resetHome();
+  });
+
+  ensureHomeHistory();
   function esc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;')}
   function attr(v){return esc(v)}
 })();
